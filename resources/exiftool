@@ -1,6 +1,4 @@
 #!/usr/bin/env perl
-sub _dbg { open my $fh, '>>', '/tmp/exiftool-debug.log'; print $fh @_; close $fh }
-BEGIN { open my $fh, '>>', '/tmp/exiftool-debug.log'; print $fh "[EXIFTOOL] compile start\n"; close $fh }
 use strict;
 use warnings;
 require 5.004;
@@ -11,10 +9,7 @@ $^W = 1;
 
 my $exePath;
 
-BEGIN { open my $fh, '>>', '/tmp/exiftool-debug.log'; print $fh "[EXIFTOOL] before use Image::ExifTool\n"; close $fh }
 use Image::ExifTool qw{:Public};
-BEGIN { open my $fh, '>>', '/tmp/exiftool-debug.log'; print $fh "[EXIFTOOL] after use Image::ExifTool\n"; close $fh }
-_dbg("[EXIFTOOL] runtime start\n");
 
 sub SigInt();
 sub Cleanup();
@@ -389,9 +384,7 @@ if ( grep /^-common_args$/i, @ARGV ) {
     @ARGV = @newArgs if $common;
 }
 
-_dbg("[EXIFTOOL] entering main loop, ARGV=(@ARGV)\n");
 Command: for ( ; ; ) {
-    _dbg("[EXIFTOOL] loop iteration start\n");
 
     if (@echo3) {
         my $str = join( "\n", @echo3 ) . "\n";
@@ -580,9 +573,7 @@ Command: for ( ; ; ) {
         $doGlob = 1;
     }
 
-    _dbg("[EXIFTOOL] creating ExifTool instance\n");
     $mt = Image::ExifTool->new;
-    _dbg("[EXIFTOOL] ExifTool instance created\n");
 
     $mt->Options( Duplicates => 0 )
       unless %Image::ExifTool::UserDefined::Options
@@ -604,9 +595,7 @@ Command: for ( ; ; ) {
 "Application version $version does not match Image::ExifTool library version $Image::ExifTool::VERSION\n";
     }
 
-    _dbg("[EXIFTOOL] entering arg loop\n");
     for ( ; ; ) {
-        _dbg("[EXIFTOOL] arg loop: ARGV=(@ARGV)\n");
 
         if (
             not @ARGV
@@ -2112,9 +2101,7 @@ s/\\(x([0-9a-fA-F]{2})|.)/$2 ? chr(hex($2)) : $unescC{$1} || $1/seg;
         }
     }
 
-    _dbg("[EXIFTOOL] about to ProcessFiles, files=(@files)\n");
     ProcessFiles($mt);
-    _dbg("[EXIFTOOL] ProcessFiles done\n");
 
     Error "No file with specified extension\n" if $filtered and not $validFile;
 
