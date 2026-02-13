@@ -27,3 +27,14 @@ struct WriteTests {
         #expect(json.contains("\"Alice\""))
     }
 }
+
+@Suite("Async Write")
+struct AsyncWriteTests {
+    @Test func roundtrip() async throws {
+        let url = try testDataURL("test.jpg")
+        let jpeg = try Data(contentsOf: url)
+        let modified = try await sharedExif.write(data: jpeg, url: url, tags: ["-Artist=async test"])
+        let json = try await sharedExif.read(data: modified, url: url)
+        #expect(json.contains("\"async test\""))
+    }
+}

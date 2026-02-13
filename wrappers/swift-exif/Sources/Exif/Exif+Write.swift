@@ -21,6 +21,18 @@ extension Exif {
         }
     }
 
+    /// Write tags to a file on disk.
+    /// - Parameter outputURL: Destination file. `nil` overwrites the source.
+    @discardableResult
+    public func write(
+        to url: URL,
+        outputURL: URL? = nil,
+        tags: [String],
+        args: [String] = []
+    ) async throws(ExifError) -> String {
+        try await runBlocking { try self.write(to: url, outputURL: outputURL, tags: tags, args: args) }
+    }
+
     /// Write tags to an in-memory buffer and return the modified file bytes.
     /// - Parameter url: Used for extension-based format detection (e.g. "photo.jpg").
     public func write(
@@ -39,5 +51,16 @@ extension Exif {
             }
             return try bytes(ctx: ptr, from: result)
         }
+    }
+
+    /// Write tags to an in-memory buffer and return the modified file bytes.
+    /// - Parameter url: Used for extension-based format detection (e.g. "photo.jpg").
+    public func write(
+        data: Data,
+        url: URL,
+        tags: [String],
+        args: [String] = []
+    ) async throws(ExifError) -> Data {
+        try await runBlocking { try self.write(data: data, url: url, tags: tags, args: args) }
     }
 }

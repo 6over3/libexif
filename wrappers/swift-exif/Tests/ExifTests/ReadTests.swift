@@ -34,6 +34,29 @@ struct ReadURLTests {
     }
 }
 
+@Suite("Async Read from URL")
+struct AsyncReadURLTests {
+    @Test func jpeg() async throws {
+        let json = try await sharedExif.read(from: testDataURL("test.jpg"))
+        #expect(json.contains("FileName"))
+    }
+
+    @Test func png() async throws {
+        let json = try await sharedExif.read(from: testDataURL("test.png"))
+        #expect(json.contains("ImageWidth"))
+    }
+}
+
+@Suite("Async Read from Buffer")
+struct AsyncReadBufferTests {
+    @Test func jpeg() async throws {
+        let url = try testDataURL("test.jpg")
+        let data = try Data(contentsOf: url)
+        let json = try await sharedExif.read(data: data, url: url)
+        #expect(json.contains("FileName"))
+    }
+}
+
 @Suite("Read from Buffer")
 struct ReadBufferTests {
     @Test func jpeg() throws {

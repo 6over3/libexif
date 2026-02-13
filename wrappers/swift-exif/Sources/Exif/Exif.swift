@@ -73,6 +73,22 @@ public final class Exif: Sendable {
     }
 }
 
+extension Exif {
+    func runBlocking<T: Sendable>(
+        _ work: @Sendable @escaping () throws -> T
+    ) async throws(ExifError) -> T {
+        let result: Result<T, any Error> = await Task.detached {
+            Result { try work() }
+        }.value
+        switch result {
+        case .success(let v): return v
+        case .failure(let e as ExifError): throw e
+        case .failure(let e):
+            throw .operationFailed(message: e.localizedDescription, exitCode: -1)
+        }
+    }
+}
+
 private func withCStringArray<R>(
     _ strings: [String],
     body: (UnsafeMutablePointer<UnsafePointer<CChar>?>?) -> R
