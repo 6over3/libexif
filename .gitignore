@@ -1,0 +1,17 @@
+build/
+.build/
+.swiftpm/
+.cache/
+
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/
+compile_commands.json

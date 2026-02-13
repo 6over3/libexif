@@ -1,0 +1,5 @@
+module CLibExif {
+    header "../../../../libexif.h"
+    link "exif"
+    export *
+}
