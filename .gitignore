@@ -5,6 +5,7 @@ build/
 
 *.o
 *.a
+!wrappers/swift-exif/libexif.xcframework/**/*.a
 *.so
 *.dylib
 *.dSYM/

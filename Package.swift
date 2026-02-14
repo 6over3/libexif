@@ -8,17 +8,14 @@ let package = Package(
         .library(name: "Exif", targets: ["Exif"]),
     ],
     targets: [
-        .systemLibrary(
-            name: "CLibExif",
-            path: "wrappers/swift-exif/Sources/CLibExif"
+        .binaryTarget(
+            name: "libexif",
+            path: "wrappers/swift-exif/libexif.xcframework"
         ),
         .target(
             name: "Exif",
-            dependencies: ["CLibExif"],
-            path: "wrappers/swift-exif/Sources/Exif",
-            linkerSettings: [
-                .unsafeFlags(["-Lbuild"]),
-            ]
+            dependencies: ["libexif"],
+            path: "wrappers/swift-exif/Sources/Exif"
         ),
         .testTarget(
             name: "ExifTests",
