@@ -92,7 +92,7 @@ EXIF_API exif_t *exif_create(const exif_config_t *cfg);
 EXIF_API void exif_destroy(exif_t *ctx);
 
 //! Read metadata from a file path.
-//! Always returns structured JSON (-json -a -s -n -G1 -b).
+//! Always returns structured JSON (-json -a -s -n -ee3 -U -G3:1 -api requestall=3 -api largefilesupport).
 //! @param ctx   Context from exif_create.
 //! @param path  Path to the image file.
 //! @param opts  Extra CLI args, config, transform. NULL for defaults.
@@ -100,11 +100,20 @@ EXIF_API exif_result_t exif_read(exif_t *ctx, const char *path,
                                  const exif_options_t *opts);
 
 //! Read metadata from an in-memory buffer. Spills to a temp file internally.
-//! Always returns structured JSON (-json -a -s -n -G1 -b).
+//! Always returns structured JSON (-json -a -s -n -ee3 -U -G3:1 -api requestall=3 -api largefilesupport).
 //! @param ctx    Context from exif_create.
 //! @param input  Source data; filename extension determines format handling.
 //! @param opts   Extra CLI args, config, transform. NULL for defaults.
 EXIF_API exif_result_t exif_read_buf(exif_t *ctx, exif_buf_t input,
+                                     const exif_options_t *opts);
+
+//! Read metadata from a file descriptor via /dev/fd.
+//! Always returns structured JSON (-json -a -s -n -ee3 -U -G3:1 -api requestall=3 -api largefilesupport).
+//! @param ctx       Context from exif_create.
+//! @param fd        Readable file descriptor.
+//! @param filename  Unused, reserved for future use.
+//! @param opts      Extra CLI args, config, transform. NULL for defaults.
+EXIF_API exif_result_t exif_read_fd(exif_t *ctx, int fd, const char *filename,
                                      const exif_options_t *opts);
 
 //! Write tags to a file.

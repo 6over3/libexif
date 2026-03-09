@@ -1,0 +1,16 @@
+diff --git a/core/iwasm/common/wasm_runtime_common.c b/core/iwasm/common/wasm_runtime_common.c
+index 3dbe4969..46af71e2 100644
+--- a/core/iwasm/common/wasm_runtime_common.c
++++ b/core/iwasm/common/wasm_runtime_common.c
+@@ -2418,8 +2418,9 @@ void
+ wasm_runtime_access_exce_check_guard_page()
+ {
+     if (exec_env_tls && exec_env_tls->handle == os_self_thread()) {
+-        uint32 page_size = os_getpagesize();
+-        memset(exec_env_tls->exce_check_guard_page, 0, page_size);
++        WASMJmpBuf *jmpbuf_node = exec_env_tls->jmpbuf_stack_top;
++        if (jmpbuf_node)
++            os_longjmp(jmpbuf_node->jmpbuf, 1);
+     }
+ }
+ #endif

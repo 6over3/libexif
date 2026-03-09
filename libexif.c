@@ -4,6 +4,7 @@
 #include "libexif.h"
 #include "wasm_export.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,7 @@ struct exif {
     wasm_function_inst_t fn_free_interp;
     uint8_t             *wasm_buf;
     int                  stdout_fd;
+    int                  stderr_fd;
     char                *script_path;
     char                 errbuf[512];
 };
@@ -94,6 +96,7 @@ static NativeSymbol exif__native_syms[] = {
     { "call_host_function", (void *)exif__call_host_stub, "(iii)i", NULL },
 };
 
+
 static exif_result_t exif__err_result(exif_allocator_t *alloc, const char *msg, int32_t code)
 {
     size_t len = strlen(msg) + 1;
@@ -109,15 +112,15 @@ static exif_result_t exif__ok_result(char *data, size_t len, int32_t code)
     };
 }
 
-static char *exif__read_stdout(exif_t *ctx, size_t *out_len)
+static char *exif__read_fd(exif_t *ctx, int fd, size_t *out_len)
 {
     exif_allocator_t *a = &ctx->alloc;
-    off_t size = lseek(ctx->stdout_fd, 0, SEEK_END);
+    off_t size = lseek(fd, 0, SEEK_END);
     if (size <= 0) { *out_len = 0; return NULL; }
-    lseek(ctx->stdout_fd, 0, SEEK_SET);
+    lseek(fd, 0, SEEK_SET);
     char *buf = a->alloc(size + 1, a->ctx);
     if (!buf) { *out_len = 0; return NULL; }
-    ssize_t n = read(ctx->stdout_fd, buf, size);
+    ssize_t n = read(fd, buf, size);
     *out_len = n > 0 ? (size_t)n : 0;
     buf[*out_len] = '\0';
     return buf;
@@ -240,6 +243,8 @@ static exif_result_t exif__run(exif_t *ctx, const char **tail, int ntail,
 
     ftruncate(ctx->stdout_fd, 0);
     lseek(ctx->stdout_fd, 0, SEEK_SET);
+    ftruncate(ctx->stderr_fd, 0);
+    lseek(ctx->stderr_fd, 0, SEEK_SET);
 
     wasm_val_t call_args[3] = {
         { .kind = WASM_I32, .of.i32 = (int32_t)script_off },
@@ -258,7 +263,8 @@ static exif_result_t exif__run(exif_t *ctx, const char **tail, int ntail,
         if (exc && strstr(exc, "wasi proc exit")) {
             exit_code = (int32_t)wasm_runtime_get_wasi_exit_code(ctx->inst);
         } else {
-            snprintf(ctx->errbuf, sizeof ctx->errbuf, "%s", exc ? exc : "unknown");
+            snprintf(ctx->errbuf, sizeof ctx->errbuf, "%s",
+                     exc ? exc : "unknown");
             wasm_error = ctx->errbuf;
         }
         wasm_runtime_clear_exception(ctx->inst);
@@ -277,10 +283,17 @@ static exif_result_t exif__run(exif_t *ctx, const char **tail, int ntail,
     if (wasm_error) {
         result = exif__err_result(alloc, wasm_error, exit_code);
     } else if (exit_code != 0) {
-        result = exif__err_result(alloc, "exiftool exited with error", exit_code);
+        size_t err_len;
+        char *err_data = exif__read_fd(ctx, ctx->stderr_fd, &err_len);
+        snprintf(ctx->errbuf, sizeof ctx->errbuf, "%.*s",
+                 (int)(err_len < sizeof ctx->errbuf - 1
+                       ? err_len : sizeof ctx->errbuf - 1),
+                 err_data ? err_data : "exiftool exited with error");
+        if (err_data) alloc->free(err_data, 0, alloc->ctx);
+        result = exif__err_result(alloc, ctx->errbuf, exit_code);
     } else {
         size_t out_len;
-        char *data = exif__read_stdout(ctx, &out_len);
+        char *data = exif__read_fd(ctx, ctx->stdout_fd, &out_len);
         result = exif__ok_result(data, out_len, exit_code);
     }
     goto cleanup;
@@ -344,11 +357,16 @@ exif_t *exif_create(const exif_config_t *cfg)
     if (ctx->stdout_fd < 0) goto fail_ctx;
     unlink(stdout_tmpl);
 
+    char stderr_tmpl[] = "/tmp/libexif_stderr_XXXXXX";
+    ctx->stderr_fd = mkstemp(stderr_tmpl);
+    if (ctx->stderr_fd < 0) goto fail_ctx;
+    unlink(stderr_tmpl);
+
     const char *dirs[] = { "/", "/tmp", "/dev" };
     char *wasi_argv[] = { "zeroperl" };
     wasm_runtime_set_wasi_args_ex(module, dirs, 3, NULL, 0, NULL, 0,
                                   wasi_argv, 1, -1, ctx->stdout_fd,
-                                  STDERR_FILENO);
+                                  ctx->stderr_fd);
 
     ctx->inst = wasm_runtime_instantiate(module, wasm_stack, wasm_heap,
                                          wamr_errbuf, sizeof wamr_errbuf);
@@ -399,6 +417,7 @@ void exif_destroy(exif_t *ctx)
     wasm_runtime_destroy();
 
     if (ctx->stdout_fd > 0) close(ctx->stdout_fd);
+    if (ctx->stderr_fd > 0) close(ctx->stderr_fd);
 
     if (ctx->script_path) {
         unlink(ctx->script_path);
@@ -408,7 +427,7 @@ void exif_destroy(exif_t *ctx)
     alloc.free(ctx, sizeof *ctx, alloc.ctx);
 }
 
-static const char *exif__read_defaults[] = { "-json", "-a", "-s", "-n", "-G1", "-b" };
+static const char *exif__read_defaults[] = { "-json", "-a", "-s", "-n", "-ee3", "-U", "-G3:1", "-api", "requestall=3", "-api", "largefilesupport" };
 #define EXIF__N_READ_DEFAULTS (int)(sizeof exif__read_defaults / sizeof exif__read_defaults[0])
 
 static void exif__apply_transform(exif_allocator_t *alloc, exif_result_t *result,
@@ -441,21 +460,57 @@ exif_result_t exif_read_buf(exif_t *ctx, exif_buf_t input,
 {
     exif_allocator_t *alloc = &ctx->alloc;
 
-    char *tmp_path = exif__write_tmpfile(alloc, input.data, input.len,
-                                   exif__suffix_of(input.filename));
-    if (!tmp_path)
-        return exif__err_result(alloc, "failed to write temp file", -1);
+    // Write to temp dir with original filename so exiftool reports it correctly
+    char dir_buf[256];
+    snprintf(dir_buf, sizeof dir_buf, "/tmp/libexif_XXXXXX");
+    if (!mkdtemp(dir_buf))
+        return exif__err_result(alloc, "failed to create temp dir", -1);
+
+    const char *name = input.filename;
+    if (!name || !*name) name = "input";
+
+    char path_buf[512];
+    snprintf(path_buf, sizeof path_buf, "%s/%s", dir_buf, name);
+
+    int fd = open(path_buf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0) { rmdir(dir_buf); return exif__err_result(alloc, "failed to create temp file", -1); }
+
+    const unsigned char *src = input.data;
+    size_t remaining = input.len;
+    while (remaining > 0) {
+        ssize_t w = write(fd, src, remaining);
+        if (w < 0) { close(fd); unlink(path_buf); rmdir(dir_buf); return exif__err_result(alloc, "write failed", -1); }
+        src += w;
+        remaining -= w;
+    }
+    close(fd);
 
     const char *tail[EXIF__N_READ_DEFAULTS + 1];
     for (int i = 0; i < EXIF__N_READ_DEFAULTS; i++)
         tail[i] = exif__read_defaults[i];
-    tail[EXIF__N_READ_DEFAULTS] = tmp_path;
+    tail[EXIF__N_READ_DEFAULTS] = path_buf;
 
     exif_result_t result = exif__run(ctx, tail, EXIF__N_READ_DEFAULTS + 1, opts);
     exif__apply_transform(alloc, &result, opts);
 
-    unlink(tmp_path);
-    alloc->free(tmp_path, 0, alloc->ctx);
+    unlink(path_buf);
+    rmdir(dir_buf);
+    return result;
+}
+
+exif_result_t exif_read_fd(exif_t *ctx, int fd, const char *filename,
+                           const exif_options_t *opts)
+{
+    char path[32];
+    snprintf(path, sizeof path, "/dev/fd/%d", fd);
+
+    const char *tail[EXIF__N_READ_DEFAULTS + 1];
+    for (int i = 0; i < EXIF__N_READ_DEFAULTS; i++)
+        tail[i] = exif__read_defaults[i];
+    tail[EXIF__N_READ_DEFAULTS] = path;
+
+    exif_result_t result = exif__run(ctx, tail, EXIF__N_READ_DEFAULTS + 1, opts);
+    exif__apply_transform(&ctx->alloc, &result, opts);
     return result;
 }
 

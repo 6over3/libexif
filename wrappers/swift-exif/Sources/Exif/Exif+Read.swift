@@ -37,4 +37,21 @@ extension Exif {
     public func read(data: Data, url: URL, args: [String] = []) async throws(ExifError) -> String {
         try await runBlocking { try self.read(data: data, url: url, args: args) }
     }
+
+    /// Extract metadata from a file descriptor as structured JSON.
+    /// - Parameter filename: Used for extension-based format detection (e.g. "photo.dng").
+    public func read(fd: Int32, filename: String, args: [String] = []) throws(ExifError) -> String {
+        try ctx.withLock { (ptr: inout OpaquePointer) throws(ExifError) -> String in
+            let result = filename.withCString { fname in
+                withOptions(args: args) { exif_read_fd(ptr, fd, fname, &$0) }
+            }
+            return try string(ctx: ptr, from: result)
+        }
+    }
+
+    /// Extract metadata from a file descriptor as structured JSON.
+    /// - Parameter filename: Used for extension-based format detection (e.g. "photo.dng").
+    public func read(fd: Int32, filename: String, args: [String] = []) async throws(ExifError) -> String {
+        try await runBlocking { try self.read(fd: fd, filename: filename, args: args) }
+    }
 }

@@ -9,9 +9,16 @@ all: xcframework
 
 lib: $(BUILD_DIR)/libexif.a
 
-$(BUILD_DIR)/libexif.a:
+$(BUILD_DIR)/libexif.a: patch
 	cmake -B $(BUILD_DIR) -DCMAKE_OSX_DEPLOYMENT_TARGET=$(MACOS_TARGET) -DCMAKE_OSX_ARCHITECTURES=arm64
 	cmake --build $(BUILD_DIR) --target exif -j$$(sysctl -n hw.ncpu)
+
+.PHONY: patch
+patch:
+	@for p in patches/*.patch; do \
+		git -C vendor/wamr apply --check --reverse "../../$$p" 2>/dev/null \
+			|| git -C vendor/wamr apply "../../$$p"; \
+	done
 
 xcframework: $(BUILD_DIR)/libexif.a
 	rm -rf $(XCFW_DIR) $(HEADERS_DIR)
